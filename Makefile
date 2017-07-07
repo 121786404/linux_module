@@ -5,9 +5,12 @@ export DRV_INSTALL_DIR=~/linux-qemu-lab-arm/root_nfs/share
 
 
 EXCLUDE_DIRS := include bin
-SUBDIRS := $(shell find . -maxdepth 1 -type d -mtime -1)
+#SUBDIRS := $(shell find . -path './bak' -prune -o -type d -mtime -1 -maxdepth 1 -print)
+SUBDIRS := $(shell find . -path './bak' -prune -o -type d -maxdepth 1 -print)
 SUBDIRS := $(basename $(patsubst ./%,%,$(SUBDIRS)))
 SUBDIRS := $(filter-out $(EXCLUDE_DIRS),$(SUBDIRS))
+
+
 
 
 all: subdirs
