@@ -1,0 +1,320 @@
+--------------------------------------------------------------设备树基本模板---------------------------------------
+
+/{ 									//这是设备树的根节点
+
+	node1{								//node1是设备树的子节点
+	a-string-property= "A string";					//a-string-property表示这个属性的名字，"A string"表示这个属性的值
+	a-string-list-property="first string","second string";		//表示这个属性有两个值
+	a-byte-data-property = [0x01 0x23 0x34 0x56];			//表示这个属性可以是二进制的数组
+
+	child-node1{							//child-node1是设备树下子节点的子节点
+		first-child-property;					//这个属性可以是空属性,也就是没有值得属性
+	  	second-child-property=<1>;				//<1>表示这个属性的整数
+
+	};
+
+
+	child-node2{							//child-node2是设备树下子节点的子节点	
+
+	};
+
+	    };
+
+
+	node2{								//node2是设备树的子节点
+
+	a-cell-property=<1 2 3 4>;					//<1 2 3 4>表示该属性的数组是整数的，也就是32位的
+
+	};
+
+
+
+
+};
+
+
+---------------------------------------------设备树规则-----------------------------
+节点node
+	 节点是： <名称>[@<设备地址>]
+	 名称是一个不超过31位的ascii字符串，你可以随便定义，最好和功能名字一样，这样好阅读
+	 <设备地址>这个地址是用来让设备树区分的，其实可以随便写，只要在设备树里面不要写重复了就是，真正驱动程序要读取的地址一般是写在reg里面，所以在reg里面就不要	 	乱写地址了；
+
+比如  firmware@0203f000{
+	compatible="samsung ，secure-firmware";  //这个是匹配驱动的属性，只有这样驱动程序才会执行
+	reg=<0x0203f000 0x1000>;	//驱动程序执行后就会来读取设备树该节点的reg数字 0x0203f000是该外设在芯片里面的基地址，0x1000是该地址的大小映射范围
+	};
+
+属性里面还可以这样写：cell-property = <0xbeef 123 0xabcd1234>; //属性可以包含三个值
+			mixed-property = "a string",[01 23 45 67],<0x1234567> 属性里面如果要包含不同的数据就必须用逗号隔开；
+		
+
+
+------------------------------------------cell规则------------------------------------------------------------
+#address-cells=<1> //表示address字段的长度为1
+#size-cell = <1>;  //表示length字段的长度为1
+
+external-bus{
+	#address-cells = <2> //在这个节点上表示的长度是决定子节点reg的address可以写几个，如果你要关心这个节点的reg长度，那么你要去看父节点的cells
+	#size-cell = <1>;    //在这个节点上表示的大小是决定子节点reg的大小可以写几个，如果你要关心这个节点的reg大小，那么你要去看父节点的cells
+	
+	ethernet@0,0{
+	  compatible = "smc，smc91";
+	  reg = <0 0 0x1000>;
+	  interrupts = <5 2>;
+	}；
+}；
+
+
+------------------------------------------中断的规则---------------------------------------------------------
+
+compatible = "acme，coyotes"；
+#address-cells = <1>;
+#size-cells =<1>;
+interrupt-parent = <&intc>; //引用的interrupt-controller@10140000这节点
+
+serial@101f0000{
+compatible="arm，pl0111"；
+reg=<0x101f0000 0x1000>;
+interrupt = <1 0>;   	   //1表示哪一个中断号，0表示内部中断，还有什么上升沿触发下降沿什么的就不是0了；
+};
+
+intc:interrupt-controller@10140000{  	//intc表示这个中断节点可以被其他节点引用
+compatible="arm，pl0111"；
+reg=<0x10140000 0x1000>;
+interrupt-controller; 		//表示中断控制器
+};
+
+
+其实就是serial串口这个外设是接在interrupt-controller@10140000这个中断控制器上面的；interrupt = <1 0>;表示使用interrupt-controller@10140000
+这个中断控制器的哪一号中断
+
+
+interrupt =<0,89,3> //interrupt可以这样写，这样写就表示 0表示共享中断，89是中断号，3是低电平触发；这种interrupt写法的形式就是这样理解的
+ 
+
+
+
+
+
+
+
+----------------------------------------现在我们在IMX6平台的设备树上面加一个节点-----------------------------------
+
+test_node@123456{
+            compatible= "fsl,test_node";
+            reg=<0x12345678 0x24
+                 0x87654321 0x25>;
+            testprop,mytest;
+            test_list_string = "red_fish","fly fish","blue fish";
+	    interrupt-parent = <&gpio6>;
+	    interrupts = <15 2>;   /*gpio6-15 sw3*/
+                     
+};
+
+这个节点就添加到设备树里面的，系统启动后，如果是4412平台那么你就会在/proc/device-tree目录下面cat到一些属性，但是飞思卡尔的IMX6还是没有找到设备树位置是加载到哪个目录下的，所以现在先别管继续看后面。
+
+
+
+
+-------------------------------------如何在驱动程序代码中获得设备树的信息-----------------------------------------------------
+说到这里和以前的平台设备平台驱动模型差不多，都要走两边；
+这里驱动获取设备树的方法是用of API的函数接口，在linux/of.h里面有以下api
+
+struct device_node *of_find_node_by_path(const char *path);					//找设备树节点
+
+struct property *of_find_property(const struct device_node *np,const char *name,int *lenp);	//找到设备树节点后获取该节点下的属性
+
+int of_device_is_compatible(const struct device_node *device,const char *compat);		//这个函数就是用来判断这个设备树里面是否有这个字符，有返回1，没有返回-1；
+
+struct device_node *of_get_parent(const struct device_node *node);				//获得父节点
+
+int of_property_read_u32_array(const struct device_node *np,const char *propname,u32 *out_values,size_t sz);//这表示我在这个np节点下先拿到了属性，然后去这个属性后面去取<0x01 0x02 0x03 0x04> 类似于这样的值
+
+static inline int of_property_read_string_index(struct device_node *np，const char *propname,int index, const char **output)；//指定属性获取指定的字符串
+
+在linux/of_irq.h里面有如下API
+
+unsigned int irq_of_parse_and_map(struct device_node *dev,int index);					//获取设备树interrupt里面写的中断号 
+
+
+
+
+----------------------------------------在IMX6_devicetree.c里面实现这些OF API的应用---------------------------------------------
+
+
+test_node@123456{                       //获取这个设备树里面的节点
+              compatible= "fsl,test_node";
+              reg=<0x12345678 0x24
+                   0x87654321 0x25>;
+              testprop,mytest;
+              test_list_string = "red_fish","fly fish","blue fish";
+	      interrupt-parent = <&gpio6>;//该组GPIO的中断控制器,这个很重要入过不写这个，在驱动里面就会出现引脚中断注册失败，然后就无法使用该中断
+	      interrupts = <15 0>;//中断控制器对应的中断号也就是改组GPIO的第几个GPIO
+               };
+
+
+struct device_node *np=NULL; //先定义一个节点返回的结构体，然后后面的of函数都是以这个节点为基准来获取数据的
+struct property *prop=NULL;  //获取节点属性后要存放的结构体变量
+
+ np=of_find_node_by_path("/test_node@123456"); //先要用这个函数来获取这个设备树node节点的位置，然在用这个节点的变量来获取这个节点下其他属性和数值
+ if(np)					       //节点获取成功范围1,获取失败返回-1，所以这个判断是必须要添加的
+ printk("np name : %s\n",np->name); //这里获取的name就是节点的名字，但是节点@后面的数字是不获取的，只获取@前面的字符 
+ printk("full name : %s\n",np->full_name);  //这个full_name变量就是要打印整个节点的字符，包含@前后的
+ 为什么要这样获取节点名称 ，是因为struct device_node {
+					const char *name;
+					const char *type;
+					phandle phandle;
+					const char *full_name;
+
+					struct	property *properties;
+					struct	property *deadprops;	/* removed properties */
+					struct	device_node *parent;
+					struct	device_node *child;
+					struct	device_node *sibling;
+					struct	device_node *next;	/* next device of same type */
+					struct	device_node *allnext;	/* next in list of all nodes */
+					struct	proc_dir_entry *pde;	/* this node's proc directory */
+					struct	kref kref;
+					unsigned long _flags;
+					void	*data;
+					#if defined(CONFIG_SPARC)
+					const char *path_component_name;
+					unsigned int unique_id;
+					struct of_irq_controller *irq_trans;
+					#endif
+					};
+
+因为np=of_find_node_by_path("/test_node@123456");执行后就在函数原形里面讲得到的设备树的值悄悄的赋值给了device_node *np
+
+
+------------如何获取节点里面的属性
+prop=of_find_property(np,"compatible",NULL); //np节点下面有很多个属性，比如compatible，reg，testprop,mytest； test_list_string 你要获取那个属性里面等于的值就必须先获取属性
+of_find_property(np,"compatible",NULL);//这个函数的np是自己定义的设备树节点，""引号里面的compatible是某个属性的门牌号，然后返回值给prop，因为prop结构和上面的np传递数值的方法是一样的
+printk("compatible value : %s\n",prop->value); //打印该属性=的参数
+printk("compatible name : %s\n",prop->name);   //打印该属性的名字
+
+
+
+
+
+------------if(of_device_is_compatible(np,"fsl,test_node"))；//这个函数就不用像of_find_property(np,"compatible",NULL)这样非要在引号里面去写属性      名称，它是直接就默认有compatible这个属性，然后就去调用该属性的值来判断这个值是否存在，该方法可以用来做条件判断
+经过测试发现只要设备树里面讲fsl,test_node改为fsl,test_nod的话of_device_is_compatible这个函数就会返回-1，表示没有这个字符，如果是fsl,test_node的话of_device_is_compatible这个函数就会返回1，表示正确，这种做法就可以想设备树打开led节点一样，在status后面写ok还是disable来确定到底用不用led驱动。
+
+
+
+
+
+---------/*读取属性reg中的整数数组*/
+设备树是这样的：reg=<0x12345678 0x24
+                   0x87654321 0x25>;
+驱动要这样：
+int ret;
+u32 regdata[4];//读取属性中的整数数组，需要先定义设备树reg中数组的个数，这里的u32是因为设备树定义的数组是u32的，如果设备树定义的是u8的我们也可以定义成u8；
+
+ret=of_property_read_u32_array(np,"reg",regdata,4);
+//
+np：	 还是这个设备树的节点，
+
+""：	 引号是要获取那个属性里面的整数，我这里是要获取设备树reg属性。
+
+regdara：是将获取到设备树的数据放入regdata数组里面，这样的话驱动程序就可以ioremap数组里面的寄存器值，然后又像2440那样移位计算，和以前的设备模型一样的麻烦。
+
+4：这个4数字代表设备树数组的大小，因为of代码原形里面也要根据设备树数组大小向驱动代码的数组赋值多少次。reg=<0x12345678 0x24 0x87654321 0x25>;毕竟reg数组长度是4
+//
+if（!ret） //判断是否读取成功，成功返回0，失败返回-1
+ //printk("-------reg = %d\n",regdata[i]);//按照10进制打印是错误的，因为设备树定义的是16进制
+  printk("-------reg = %x\n",regdata[i]);//打印16进制就对了 
+
+
+
+---------------读取属性中字符串数组
+设备树是这样的   test_list_string = "red_fish","fly fish","blue fish";
+驱动要这样：
+const char *pstr[3];//先定义个二级数组来存放设备树的字符串
+//ret=of_property_read_string(np,"test_list_string",pstr);//这个函数只能获取一个字符串，如果是多个字符串获取就要出问题
+
+  int z;
+  for(z=0;z<3;z++){
+  if(!ret){
+  ret=of_property_read_string_index(np,"test_list_string",z,&pstr[z]);//这个函数是指定字符串数组的第几个然后再去获取，并不一次性将设备树的字符串数组获取完
+  printk("pstr = %s\n",pstr[z]);
+  }
+
+
+
+---------------设备树属性值为空，但是可以作为标志来用
+设备树是这样的：testprop,mytest;
+驱动要这样：
+ if(of_find_property(np,"testprop,mytest",NULL)){   //其实和of_device_is_compatible是一样的用来确定设备树有没有这个标志，有这个标志实现什么功能，没有这个标志实现什么功能
+ printk("testprop,mytest TRUE\n");
+}
+else
+printk("testprop,mytest failed\n")
+
+
+
+
+
+-------------------------------------------------获取设备树的中断-----------------------------------------------------------------------
+首先确定按键在原理图什么位置
+
+我的按键是在数据手册中的 中断号 引脚 共享中断号
+			  108   GPIO6  0-108
+
+也就是我的按键是在GPIO6_IO15  所以是在第6组中断，中断号是15
+
+在设备树中是这样的：
+interrupt-parent = <&gpio6>;//意思是制定中断控制器在第6组中断GPIO6_IO15
+interrupts = <15 2>;   //中断号是15   2表示触发方式
+
+
+在驱动中要用of函数：
+irqnumber=irq_of_parse_and_map(np,0);  //从设备树中获取中断号  #include<linux/of_irq.h> //这是从设备树获取中断号函数需要的头文件
+
+printk("irq = %d\n",irqnumber); //打印获取的中断号
+
+ret=request_irq(irqnumber,tree_interrput,IRQF_TRIGGER_FALLING,"key",NULL);//中断函数申请；中断申请成功返回0给ret
+
+第一个是中断号  int irqnumber;//中断号存放位置
+
+第二个是中断函数的函数名irqreturn_t tree_interrput(int irq,void *dev)
+{
+return IRQ_HANDLED;
+
+}
+第三个是中断触发方式：这个参数有很多都在#include<linux/interrupt.h>
+
+第四个是中断用于什么的名字，随便写"key"
+
+第五个是要传入中断函数的值，这里写NULL；
+
+free_irq(irqnumber,NULL);释放中断
+
+
+
+---------------------------------------------------------irq_of_parse_and_map具体方法------------------------
+函数原型extern unsigned int irq_of_parse_and_map(struct device_node *node, int index);
+node：是设备树节点
+index：这个很重要，是要获取的中断号；
+	这个index获取方式是这样的  设备树node{
+	interrupts = <15 2>,<14 2>,<13 2>;/*这个是针对irq_of_parse_and_map(np,0);这个函数设置的中断数量，如果一个外设有多个中断的话interrupts = <15 2>,<14 2>,<13 2>;就是这样写，表示有三个外部中断*/  
+
+	}
+	这个时候在驱动代码里面要想获取三个外部中断就要这样
+	   比如：
+                    设备树interrupts = <15 2>,<14 2>,<13 2>;
+		    驱动：
+                    irqnumber=irq_of_parse_and_map(np,0); //代表取<15 2> 里面的15号中断
+                    irqnumber=irq_of_parse_and_map(np,1); //代表取<14 2> 里面的14号中断
+                    irqnumber=irq_of_parse_and_map(np,2); //代表取<13 2> 里面的13号中断*/
+  	这三个外部中断号分别是15 14 13 这时irq_of_parse_and_map(np,0);函数的第二位参数就是要取设备树该节点下中断,也就是获取第几个尖括号里面的中断号*/
+  
+ 一般外设都只有一个中断触发引脚那么设备树就要这样：
+			node{
+			interrupts = <15 2>;//这个<>括号里面第一个参数是中断号，第二个参数是触发方式，但是实际应用中都只用irq_of_parse_and_map函数获取第一个参数的值，第二个参数貌似
+			也要用一个函数来获取，但是现在还没有用过，所以第二个参数随便写，反正中断触发方式都是在驱动程序里面用中断申请函数来选择触发方式
+			}
+			然后再驱动里面就irqnumber=irq_of_parse_and_map(np,0);这样就可以了，一个中断<>代表一个序号，在这里获取设备树第0号位置的中断变量。
+
+				
+

@@ -18,4 +18,4 @@ test_ap:
 	arm-linux-gnueabi-gcc cdata_test_ap.c -o cdata_test_ap
 	
 clean:
-	rm -rf *.o *~ core .depend .*.cmd *.ko *.mod.c .tmp_versions Module.symvers modules.order
+	rm -rf *.o *~ core .depend .*.cmd *.ko *.mod.c .tmp_versions Module.symvers modules.order cdata_test_ap
