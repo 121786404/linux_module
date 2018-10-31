@@ -6,7 +6,7 @@ obj-m += chardev_test.o
 # Specify flags for the module compilation.
 EXTRA_CFLAGS=-g -O0
 
-build: kernel_modules kernel_install test_ap
+build: kernel_modules test_ap kernel_install
 
 kernel_modules:
 	make -C $(KERNELDIR) M=$(CURDIR) modules
