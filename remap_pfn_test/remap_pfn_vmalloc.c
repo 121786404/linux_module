@@ -13,7 +13,16 @@ static void *kbuff;
 static int remap_pfn_open(struct inode *inode, struct file *file)
 {
 	struct mm_struct *mm = current->mm;
-
+/*
+    client: remap_pfn_test_ (710)
+    code  section: [0x10000   0x6ad28]
+    data  section: [0x7b000   0x7bf68]
+    brk   section: s: 0x7d000, c: 0x9f000
+    mmap  section: s: 0xb6fa2000
+    stack section: s: 0xbecece90
+    arg   section: [0xbececf6f   0xbececf82]
+    env   section: [0xbececf82   0xbececfe9]
+*/
 	printk("client: %s (%d)\n", current->comm, current->pid);
 	printk("code  section: [0x%lx   0x%lx]\n", mm->start_code, mm->end_code);
 	printk("data  section: [0x%lx   0x%lx]\n", mm->start_data, mm->end_data);
@@ -36,6 +45,13 @@ static int remap_pfn_mmap(struct file *file, struct vm_area_struct *vma)
 	unsigned long vmstart = vma->vm_start;
 	int i = 0;
 
+/*
+    phy: 0x8dc40000, offset: 0x0, size: 0x10000   
+    
+    比如用 vmalloc 分配128KB的内存，vmalloc计算发现需要分配32个page，然后会调用32次alloc_page()，
+    每次从伙伴系统分配1个page，每分配一个page就将该page映射到准备好的连续的虚拟地址上，
+    当然也就无法保证这些page之间对应的物理页帧的连续性
+*/
 	printk("phy: 0x%lx, offset: 0x%lx, size: 0x%lx\n", pfn_start << PAGE_SHIFT, offset, size);
 
 	while (size > 0) {
